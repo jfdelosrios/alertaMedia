@@ -1,0 +1,5 @@
+simbolo;metodo;periodo;pixelesAdicionales;puntosAdicionales
+AUDUSD.;SMA;200;10;3
+EURUSD.;EmA;100;15;4
+AUdJPY.;LWMA;50;20;5
+BTCUSD.;EMA;150;25;7

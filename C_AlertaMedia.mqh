@@ -13,12 +13,6 @@
 #include <Trade/SymbolInfo.mqh>
 #include "varios.mqh"
 
-enum ENUM_TENDENCIA
-  {
-   bajista,
-   alcista
-  };
-
 
 //+------------------------------------------------------------------+
 //|                                                                  |
@@ -29,7 +23,6 @@ class C_AlertaMedia
 private:
 
    ENUM_TIMEFRAMES   i_periodo;
-   ENUM_TENDENCIA    i_tendencia;
 
    CiMA              m_MA;
 
@@ -48,6 +41,8 @@ private:
       const int pos
    );
 
+   void              EvaluarEntrada(const int index);
+
 public:
                      C_AlertaMedia();
                     ~C_AlertaMedia();
@@ -61,13 +56,29 @@ public:
       const int _MA_period, // Periodo
       const ENUM_MA_METHOD _MA_method, // Tipo
 
-      const ENUM_TENDENCIA _tendencia, // tendencia
-
       const ushort _puntosAdicionales //Distancia adicional (Puntos)
 
    );
 
    void              _OnTick();
+
+   string            simbolo() { return m_simbolo.Name();};
+   string            metodoMedia() { return EnumToString(m_MA.MaMethod());};
+   int               periodoMedia() { return m_MA.MaPeriod();};
+   double            valorMedia() { return m_simbolo.NormalizePrice(m_MA.Main(1));};
+
+   string            descripcion()
+     {
+      return (
+                m_MA.Symbol() + "   " +
+                EnumToString(m_MA.Period()) + "   " +
+                EnumToString(m_MA.MaMethod()) + "   " +
+                IntegerToString(m_MA.MaPeriod(), 4) + "   " +
+                DoubleToString(m_simbolo.NormalizePrice(m_MA.Main(1)), m_simbolo.Digits())
+
+             );
+
+     };
 
   };
 
@@ -100,14 +111,12 @@ ENUM_INIT_RETCODE C_AlertaMedia::_OnInit(
    const int _MA_period, // Periodo
    const ENUM_MA_METHOD _MA_method, // Tipo
 
-   const ENUM_TENDENCIA _tendencia, // tendencia
    const ushort _puntosAdicionales //Distancia adicional (Puntos)
 
 )
   {
 
    i_periodo =  _periodo;
-   i_tendencia = _tendencia;
 
    if(!m_simbolo.Name(_simbolo))
      {
@@ -204,10 +213,51 @@ ENUM_INIT_RETCODE C_AlertaMedia::_OnInit(
 
    m_precioAdicional = _puntosAdicionales * m_simbolo.Point();
 
-   m_tiempo[0]=0;
-   m_tiempo[1]=0;
+   m_tiempo[0] = 0;
+   m_tiempo[1] = 0;
 
    return(INIT_SUCCEEDED);
+  }
+
+
+
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+void C_AlertaMedia::EvaluarEntrada(const int index)
+  {
+
+   if(m_tiempo[index - 1] == m_Time.GetData(index))
+      return;
+
+   string mensaje = "Posible entrada en "  +
+                    m_simbolo.Name() + " " +
+                    EnumToString(m_MA.Period()) + "   " +
+                    "indice " + IntegerToString(index) + "   " +
+                    EnumToString(m_MA.MaMethod()) + "   " +
+                    IntegerToString(m_MA.MaPeriod(), 4)
+                    ;
+
+
+   if(m_Low.GetData(index) >= m_MA.Main(index))
+     {
+      if((m_Low.GetData(index) - m_precioAdicional) <= m_MA.Main(index))
+        {
+         if(!EnviarMensaje(__FILE__, mensaje, true))
+            return;
+        }
+     }
+
+   if(m_High.GetData(index) <= m_MA.Main(index))
+     {
+      if((m_High.GetData(index) + m_precioAdicional) >= m_MA.Main(index))
+        {
+         if(!EnviarMensaje(__FILE__, mensaje, true))
+            return;
+        }
+     }
+
+   m_tiempo[index - 1] = m_Time.GetData(index);
   }
 
 
@@ -225,38 +275,8 @@ void C_AlertaMedia::_OnTick()
 
    m_MA.Refresh();
 
-   string propiedadesMedia = "";
-   propiedadesMedia = propiedadesMedia + EnumToString(m_MA.MaMethod());
-   propiedadesMedia = propiedadesMedia + ", ";
-   propiedadesMedia = propiedadesMedia + "periodo: " ;
-
-   propiedadesMedia = propiedadesMedia +
-                      IntegerToString(m_MA.MaPeriod())
-                      ;
-
-   string mensaje1 = "";
-
-   if(i_tendencia == alcista)
-     {
-      mensaje1 = "Tendencia alcista \n " + propiedadesMedia;
-
-      if((m_Low.GetData(1) - m_precioAdicional) <= m_MA.Main(1))
-         EnviarMensaje_(mensaje1, 0);
-
-      if((m_Low.GetData(2) - m_precioAdicional) <= m_MA.Main(2))
-         EnviarMensaje_(mensaje1, 1);
-     }
-
-   if(i_tendencia == bajista)
-     {
-      mensaje1 = "Tendencia bajista \n " + propiedadesMedia;
-
-      if((m_High.GetData(1) + m_precioAdicional) >= m_MA.Main(1))
-         EnviarMensaje_(mensaje1, 0);
-
-      if((m_High.GetData(2) + m_precioAdicional) >= m_MA.Main(2))
-         EnviarMensaje_(mensaje1, 1);
-     }
+   EvaluarEntrada(1);
+   EvaluarEntrada(2);
 
   }
 
@@ -281,8 +301,6 @@ void C_AlertaMedia::EnviarMensaje_(
       "\n"
       ;
 
-   if(!EnviarMensaje(__FILE__, mensaje, true))
-      return;
 
    m_tiempo[pos] = m_Time.GetData(pos + 1);
   }
